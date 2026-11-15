@@ -7,6 +7,7 @@ export {
   LinkError,
   SoulDialLink,
   crc32,
+  dialName,
   gamesetCommand,
   publicSnapshot,
   quietSignals,

@@ -161,11 +161,18 @@ From `souldial-connector`:
 - `link.write(op)` → `{ status, value? }` — `op` is
   `{ kind: "life", seat, value, expected? }` or
   `{ kind: "counter", seat, type, source?, value, expected?, index? }`.
+- `link.setupGame({ life?, players })` → `{ status }` — starts a new Commander
+  game on the Dial that matches your table: one seat per player in the order
+  given, the starting life (default 40), partner commanders
+  (`players: [{ name, commanders?: 1 | 2 }]`) and each player's name. The game
+  in progress on the Dial is saved to its history first. Check
+  `snapshot.can_setup` before offering it; see *Setting up the Dial* below.
 - `link.writeSupported` — `false` once the Dial reports it cannot accept writes.
 - `link.close()`.
 - `new TableSync({ link, table, prefer?, pollMs?, onStatus?, autoPoll? })`, `.start()`, `.stop()`.
 - Helpers: `lifeKey`, `counterKey`, `customKey`, `parseKey`, `dialFields`,
-  `COUNTER_TYPES`, `COUNTER_SOURCE_NONE`, `SOULDIAL_USB_FILTERS`, `LinkError`.
+  `COUNTER_TYPES`, `COUNTER_SOURCE_NONE`, `SOULDIAL_USB_FILTERS`, `LinkError`,
+  `dialName` (a name as the Dial will show it).
 
 From `souldial-connector/convoke`: `createConvokeTable(client, { seats, trackers? })`, `TRACKER_TYPES`.
 
@@ -176,6 +183,32 @@ Write statuses: `ok`, `conflict`, `protected`, `missing`, `no_game` (the Dial
 is not in a game), `no_seat`, `not_ready`, `busy`, `unsupported`.
 
 Full types are in [`src/index.d.ts`](src/index.d.ts).
+
+## Setting up the Dial
+
+Instead of asking players to match Dial seats to your table, you can set the
+Dial up from the table:
+
+```js
+const state = await link.readState();
+if (state.can_setup && !state.wireless) {
+  const { status } = await link.setupGame({
+    players: table.players.map((p) => ({ name: p.name, commanders: p.partner ? 2 : 1 })),
+  });
+  if (status === "ok") {
+    const sync = new TableSync({ link, table: createTable(table.players.map((p) => p.id)), prefer: "table" });
+    await sync.start();
+  }
+}
+```
+
+Dial seat *i* is then table player *i*. Names are shown as printable ASCII, at
+most 15 characters (accents are dropped). The Dial refuses setup with
+`wireless` while it is in a multi-Dial game, `wrong_game` when it is not on
+Magic: The Gathering, and `screen` while a setup page or menu is open on it;
+`unsupported` means its firmware predates setup. If the page reloads, compare
+`state.players` names with `dialName(name)` before setting up again, so a game
+already running for your table is not restarted.
 
 ## USB safety
 
@@ -221,11 +254,18 @@ Writing:
 ```
 GAMESET <id> LIFE seat=<0-5> value=<v> [if=<expected>]
 GAMESET <id> COUNTER seat=<0-5> type=<0-21> source=<0-11|255> value=<v> [if=<expected>] [index=<0-31>]
+GAMESET <id> SETUP players=<1-6> life=<1-999> [cmdrs=<1|2 per seat, e.g. 1211>]
+GAMESET <id> SEAT seat=<0-5> name=<hex of 1-15 printable ASCII bytes>
 
-GAMESET,OK,id=<id>,value=<applied>
-GAMESET,ERR,id=<id>,status=<busy|not_ready|no_game|no_seat|missing|protected|conflict>[,value=<current>]
+GAMESET,OK,id=<id>,value=<applied>          (SETUP: players, SEAT: seat)
+GAMESET,ERR,id=<id>,status=<busy|not_ready|no_game|no_seat|missing|protected|conflict|
+                             wireless|wrong_game|screen|failed>[,value=<current>]
 GAMESET,ERR,id=00000000,status=bad_request
 ```
+
+`SETUP` answers once the Dial has applied the new game, which can take a few
+seconds. Snapshots from firmware with setup carry `start_life`, `wireless` and
+each player's `commanders`.
 
 `<id>` is 8 hex digits chosen by the caller and echoed back. `index` is
 required for custom counters (type 19). One write is handled at a time.

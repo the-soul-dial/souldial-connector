@@ -3,6 +3,7 @@
 // Read half:  GAMESTATE <id> <base_revision>  -> checksummed full/delta/unchanged snapshot
 // Write half: GAMESET <id> LIFE|COUNTER ...    -> one gameplay value through the Dial's
 //                                                 normal protected/synced/undoable path
+// Setup:      GAMESET <id> SETUP / SEAT        -> new Dial game matching the table
 // Speaks the Soul Dial firmware's physical-USB GAMESTATE and GAMESET services.
 // No dependencies; works in Chrome/Edge (navigator.serial) and in Node tests via a
 // fake transport.
@@ -20,8 +21,10 @@ const MAX_SNAPSHOT_BYTES = 65536;
 const MAX_LINE_BYTES = 512;
 const MIN_REQUEST_SPACING_MS = 500; // Firmware refuses GAMESTATE inside 500 ms.
 const WRITE_TIMEOUT_MS = 3000;
-const PLAYER_KEYS = new Set(["index", "name", "life", "color", "knocked_out", "chess_ms", "total_time_ms", "counters"]);
-const DELTA_KEYS = new Set(["num_players", "active_player", "turn_number", "game_type", "game_active", "winner_player", "timer", "players"]);
+const SETUP_TIMEOUT_MS = 20000; // the Dial archives the old game and applies its rules first
+const DIAL_NAME_BYTES = 15;
+const PLAYER_KEYS = new Set(["index", "name", "life", "color", "knocked_out", "commanders", "chess_ms", "total_time_ms", "counters"]);
+const DELTA_KEYS = new Set(["num_players", "active_player", "turn_number", "game_type", "game_active", "start_life", "wireless", "winner_player", "timer", "players"]);
 
 export class LinkError extends Error {
   constructor(code, message) {
@@ -107,6 +110,7 @@ export function publicSnapshot(raw) {
       index,
       name: text(player.name, `Player ${index + 1}`),
       life: int(player.life, -32768, 32767),
+      commanders: player.commanders === undefined ? null : int(player.commanders, 1, 2),
       color: color(player.color),
       knocked_out: bool(player.knocked_out),
       chess_ms: int(player.chess_ms, 0, 0xffffffff),
@@ -120,8 +124,12 @@ export function publicSnapshot(raw) {
     num_players: count,
     active_player: int(raw.active_player, 0, count - 1),
     turn_number: int(raw.turn_number, 0, 0xffffffff),
-    game_type: int(raw.game_type, 0, 11),
+    game_type: int(raw.game_type, 0, 255),
     game_active: bool(raw.game_active),
+    // Firmware that reports start_life also takes setupGame().
+    can_setup: raw.start_life !== undefined,
+    start_life: raw.start_life === undefined ? null : int(raw.start_life, 0, 65535),
+    wireless: raw.wireless === undefined ? false : bool(raw.wireless),
     winner_player: raw.winner_player === null ? null : int(raw.winner_player, 0, count - 1),
     timer: {
       enabled: bool(timer.enabled),
@@ -404,20 +412,66 @@ export class SoulDialLink {
     });
   }
 
-  #gamesetOnce(command) {
+  // New local Commander game on the Dial matching an online table, then each
+  // seat's name. players: [{ name, commanders: 1 | 2 }] in Dial seat order.
+  // The game in progress on the Dial is saved to its Game History first.
+  // Resolves { status }: ok | wireless (in a wireless game: leave it first) |
+  // wrong_game (Dial not on Magic) | screen (a setup page or menu is open) |
+  // failed | busy | unsupported (firmware without setup).
+  setupGame({ life = 40, players }) {
+    return this.#serial(async () => {
+      if (!Array.isArray(players) || players.length < 1 || players.length > 6) throw new RangeError("setupGame needs 1-6 players");
+      const setup = gamesetCommand(this.#nonce(), {
+        kind: "setup", players: players.length, life, commanders: players.map((p) => (p?.commanders === 2 ? 2 : 1)),
+      });
+      const result = await this.#retryBusy(() => this.#gamesetOnce(setup, SETUP_TIMEOUT_MS, "unsupported"));
+      if (result.status !== "ok") return { status: result.status };
+      for (const [seat, player] of players.entries()) {
+        const named = await this.#retryBusy(() => this.#gamesetOnce(
+          gamesetCommand(this.#nonce(), { kind: "seat", seat, name: dialName(player?.name, `Player ${seat + 1}`) })));
+        if (named.status !== "ok") return { status: named.status };
+      }
+      return { status: "ok" };
+    });
+  }
+
+  async #retryBusy(attempt) {
+    for (let i = 0; i < 5; i++) {
+      const result = await attempt();
+      if (result.status !== "busy") return result;
+      await delay(100 * (i + 1));
+    }
+    return { status: "busy" };
+  }
+
+  // badRequest: what an old firmware's bad_request means for this command.
+  #gamesetOnce(command, timeoutMs = WRITE_TIMEOUT_MS, badRequest = null) {
     const id = command.split(" ")[1];
     return this.#exchange(command, (line) => {
       if (line === "CMD,ERR,unknown=GAMESET" || line === `CMD,ERR,unknown=${command}`) return { status: "unsupported" };
-      if (line === "GAMESET,ERR,id=00000000,status=bad_request") throw new LinkError("invalid", "The Soul Dial refused a malformed GAMESET.");
+      if (line === "GAMESET,ERR,id=00000000,status=bad_request") {
+        if (badRequest) return { status: badRequest };
+        throw new LinkError("invalid", "The Soul Dial refused a malformed GAMESET.");
+      }
       let m;
       if ((m = line.match(new RegExp(`^GAMESET,OK,id=${id},value=(-?[0-9]+)$`)))) return { status: "ok", value: Number(m[1]) };
       if ((m = line.match(new RegExp(`^GAMESET,ERR,id=${id},status=([a-z_]+)(?:,value=(-?[0-9]+))?$`)))) {
         return m[2] === undefined ? { status: m[1] } : { status: m[1], value: Number(m[2]) };
       }
       return undefined;
-    }, WRITE_TIMEOUT_MS);
+    }, timeoutMs);
   }
 }
+
+// A player name the Dial can show: printable ASCII (accents dropped), at most
+// 15 bytes, never empty.
+export function dialName(name, fallback = "Player") {
+  const ascii = String(name ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]/g, "").replace(/\s+/g, " ").trim();
+  return (ascii || fallback).slice(0, DIAL_NAME_BYTES).trim() || fallback.slice(0, DIAL_NAME_BYTES);
+}
+
+const toHex = (text) => [...new TextEncoder().encode(text)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 function checkInt(value, low, high, name) {
   if (!Number.isInteger(value) || value < low || value > high) throw new RangeError(`GAMESET ${name} out of range`);
@@ -434,8 +488,19 @@ export function gamesetCommand(id, op) {
     parts.push("COUNTER", `seat=${checkInt(op.seat, 0, 5, "seat")}`, `type=${checkInt(op.type, 0, 21, "type")}`,
       `source=${source}`, `value=${checkInt(op.value, -32767, 32767, "value")}`);
     if (op.index !== undefined && op.index !== null) parts.push(`index=${checkInt(op.index, 0, 31, "index")}`);
+  } else if (op.kind === "setup") {
+    const players = checkInt(op.players, 1, 6, "players");
+    const commanders = op.commanders ?? [];
+    if (commanders.length && commanders.length !== players) throw new RangeError("GAMESET commanders must match players");
+    parts.push("SETUP", `players=${players}`, `life=${checkInt(op.life, 1, 999, "life")}`);
+    if (commanders.length) parts.push(`cmdrs=${commanders.map((c) => checkInt(c, 1, 2, "commanders")).join("")}`);
+    return parts.join(" ");
+  } else if (op.kind === "seat") {
+    const name = dialName(op.name);
+    parts.push("SEAT", `seat=${checkInt(op.seat, 0, 5, "seat")}`, `name=${toHex(name)}`);
+    return parts.join(" ");
   } else {
-    throw new TypeError("GAMESET kind must be life or counter");
+    throw new TypeError("GAMESET kind must be life, counter, setup or seat");
   }
   if (op.expected !== undefined && op.expected !== null) parts.push(`if=${checkInt(op.expected, -32768, 32767, "if")}`);
   return parts.join(" ");

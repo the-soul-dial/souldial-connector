@@ -249,3 +249,34 @@ test("Convoke tracker ids can be renamed or switched off without editing the pac
   assert.equal(await table.write(counterKey(0, T.STORM), 2, null), false);
   assert.equal(await table.write(counterKey(0, T.TREASURE), 1, null), true); // defaults still apply
 });
+
+test("setupGame starts a matching Dial game: seats, life, partners and ASCII names", async () => {
+  const dial = new FakeDial(makeGame([20, 20]));
+  const link = fastLink(dial);
+  assert.equal((await link.readState()).can_setup, false); // no start_life in this snapshot
+  const result = await link.setupGame({ life: 40, players: [
+    { name: "Zoë Ångström-Kowalczyk" }, { name: "Bob", commanders: 2 }, { name: "   " },
+  ] });
+  assert.deepEqual(result, { status: "ok" });
+  assert.deepEqual(dial.setups, [{ count: 3, life: 40, cmdrs: "121" }]);
+  const state = await link.readState();
+  assert.equal(state.can_setup, true);
+  assert.equal(state.start_life, 40);
+  assert.deepEqual(state.players.map((p) => [p.name, p.life, p.commanders]),
+    [["Zoe Angstrom-Ko", 40, 1], ["Bob", 40, 2], ["Player 3", 40, 1]]);
+  assert.equal(gamesetCommand("ABCD1234", { kind: "seat", seat: 1, name: "Al" }), "GAMESET ABCD1234 SEAT seat=1 name=416c");
+  assert.equal(gamesetCommand("ABCD1234", { kind: "setup", players: 2, life: 30, commanders: [2, 1] }),
+    "GAMESET ABCD1234 SETUP players=2 life=30 cmdrs=21");
+  assert.throws(() => gamesetCommand("ABCD1234", { kind: "setup", players: 2, life: 40, commanders: [1] }), RangeError);
+});
+
+test("setupGame reports refusals and older firmware without throwing", async () => {
+  for (const status of ["wireless", "wrong_game", "screen", "failed"]) {
+    const link = fastLink(new FakeDial(makeGame([40]), { setupStatus: status }));
+    assert.deepEqual(await link.setupGame({ players: [{ name: "A" }] }), { status });
+  }
+  assert.deepEqual(await fastLink(new FakeDial(makeGame([40]), { setup: false })).setupGame({ players: [{ name: "A" }] }),
+    { status: "unsupported" });
+  assert.deepEqual(await fastLink(new FakeDial(makeGame([40]), { gameset: false })).setupGame({ players: [{ name: "A" }] }),
+    { status: "unsupported" });
+});

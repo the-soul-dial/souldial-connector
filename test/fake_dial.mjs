@@ -21,9 +21,12 @@ export function makeGame(lives, { counters = [] } = {}) {
 }
 
 export class FakeDial {
-  constructor(game, { gameset = true, protectedSeats = [] } = {}) {
+  constructor(game, { gameset = true, protectedSeats = [], setup = true, setupStatus = "ok" } = {}) {
     this.game = game;
     this.gameset = gameset;
+    this.setup = setup;
+    this.setupStatus = setupStatus;
+    this.setups = [];
     this.protectedSeats = new Set(protectedSeats);
     this.revision = 0;
     this.sent = null; // last acknowledged snapshot JSON
@@ -97,8 +100,31 @@ export class FakeDial {
     this.emit(out);
   }
 
+  // SETUP / SEAT as the firmware takes them (setup: false = older GAMESET firmware).
+  setupCommand(parts) {
+    const id = parts[1];
+    const args = Object.fromEntries(parts.slice(3).map((p) => p.split("=")));
+    if (!this.setup) return this.emit("GAMESET,ERR,id=00000000,status=bad_request\n");
+    if (parts[2] === "SETUP") {
+      if (this.setupStatus !== "ok") return this.emit(`GAMESET,ERR,id=${id},status=${this.setupStatus}\n`);
+      const count = Number(args.players), life = Number(args.life);
+      const cmdrs = args.cmdrs ?? "1".repeat(count);
+      this.game = {
+        ...makeGame(Array(count).fill(life)), start_life: life, wireless: false,
+      };
+      this.game.players.forEach((p, i) => { p.name = `Player ${i + 1}`; p.commanders = Number(cmdrs[i]); });
+      this.setups.push({ count, life, cmdrs });
+      return this.emit(`GAMESET,OK,id=${id},value=${count}\n`);
+    }
+    const player = this.game.players[Number(args.seat)];
+    if (!player) return this.emit(`GAMESET,ERR,id=${id},status=no_seat\n`);
+    player.name = args.name.match(/../g).map((h) => String.fromCharCode(parseInt(h, 16))).join("");
+    return this.emit(`GAMESET,OK,id=${id},value=${args.seat}\n`);
+  }
+
   gamesetCommand(parts) {
     const id = parts[1];
+    if (parts[2] === "SETUP" || parts[2] === "SEAT") return this.setupCommand(parts);
     const args = Object.fromEntries(parts.slice(3).map((p) => p.split("=")).map(([k, v]) => [k, Number(v)]));
     const reply = (status, value) => this.emit(status === "ok"
       ? `GAMESET,OK,id=${id},value=${value}\n`

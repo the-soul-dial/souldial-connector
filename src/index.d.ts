@@ -38,6 +38,8 @@ export interface DialPlayer {
   life: number;
   color: string;
   knocked_out: boolean;
+  /** 1, or 2 with a partner commander; null on firmware without setup. */
+  commanders: 1 | 2 | null;
   chess_ms: number;
   total_time_ms: number;
   counters: DialCounter[];
@@ -51,6 +53,12 @@ export interface DialSnapshot {
   turn_number: number;
   game_type: number;
   game_active: boolean;
+  /** True when this firmware takes SoulDialLink.setupGame(). */
+  can_setup: boolean;
+  /** Starting life of the Dial's current game type; null on older firmware. */
+  start_life: number | null;
+  /** In a wireless (multi-Dial) game or lobby: setupGame() is refused. */
+  wireless: boolean;
   winner_player: number | null;
   timer: { enabled: boolean; running: boolean; mode: number; duration_ms: number; turn_ms: number };
   players: DialPlayer[];
@@ -73,6 +81,17 @@ export type WriteOp =
 export type WriteStatus =
   | "ok" | "conflict" | "protected" | "missing" | "no_game" | "no_seat"
   | "not_ready" | "busy" | "unsupported";
+
+export interface SetupPlayer {
+  /** Shown on the Dial as printable ASCII, at most 15 characters (see dialName). */
+  name: string;
+  /** 2 for partner commanders. */
+  commanders?: 1 | 2;
+}
+
+export type SetupStatus =
+  | "ok" | "wireless" | "wrong_game" | "screen" | "failed" | "busy" | "unsupported"
+  | "no_game" | "no_seat" | "protected" | "not_ready";
 
 export interface WriteResult {
   status: WriteStatus;
@@ -110,6 +129,15 @@ export declare class SoulDialLink {
   readState(): Promise<DialSnapshot>;
   /** Writes one life or counter value through the Dial's normal, undoable path. */
   write(op: WriteOp): Promise<WriteResult>;
+  /**
+   * Starts a new local Commander game on the Dial matching a table: one seat per
+   * player in this order, the starting life, partner commanders and names. The
+   * Dial's game in progress is saved to its Game History first. Refused with
+   * "wireless" in a multi-Dial game, "wrong_game" when the Dial is not on Magic,
+   * "screen" while a setup page or menu is open on the Dial, and "unsupported"
+   * on firmware without setup (check snapshot.can_setup first).
+   */
+  setupGame(setup: { life?: number; players: SetupPlayer[] }): Promise<{ status: SetupStatus }>;
   close(): Promise<void>;
 }
 
@@ -123,7 +151,12 @@ export interface SerialPortLike {
 }
 
 export declare function crc32(bytes: Iterable<number>): number;
-export declare function gamesetCommand(id: string, op: WriteOp): string;
+export declare function gamesetCommand(
+  id: string,
+  op: WriteOp | { kind: "setup"; players: number; life: number; commanders?: Array<1 | 2> } | { kind: "seat"; seat: number; name: string },
+): string;
+/** A name the Dial can show: printable ASCII, accents dropped, at most 15 characters. */
+export declare function dialName(name: string | null | undefined, fallback?: string): string;
 export declare function publicSnapshot(raw: unknown): DialSnapshot;
 /** Lowers RTS, then DTR (the order matters: RTS high with DTR low resets the Dial). */
 export declare function quietSignals(port: SerialPortLike): Promise<void>;
