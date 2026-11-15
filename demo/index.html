@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul Dial Table Link</title>
+<style>
+  :root { --bg: #f6f6f4; --fg: #1d1d1f; --muted: #66666c; --card: #fff; --line: #d9d9dc; --accent: #6b3fd6; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151517; --fg: #ededf0; --muted: #a0a0a8; --card: #212125; --line: #34343a; --accent: #a98bff; --bad: #ff8a80; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  button, select { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card h2 { font-size: 15px; margin: 0 0 8px; }
+  .player { border-top: 1px solid var(--line); padding: 8px 0; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .life { font-size: 28px; font-weight: 600; min-width: 64px; font-variant-numeric: tabular-nums; }
+  .chip { font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+  .row button { padding: 3px 9px; }
+  #status { font-weight: 600; }
+  #status.bad { color: var(--bad); }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Soul Dial Table Link</h1>
+  <p>Links a USB Soul Dial with an online table in both directions. This page uses a mock table through the same Convoke adapter an online platform would use. Chrome or Edge on a computer; serve over http://localhost.</p>
+  <div class="bar">
+    <label>Players <select id="players"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label>
+    <label>First sync <select id="prefer"><option value="dial">Use the Dial's totals</option><option value="table">Use the table's totals</option></select></label>
+    <button class="primary" id="connect">Connect Soul Dial</button>
+    <button id="disconnect" disabled>Disconnect</button>
+    <span id="status">Not connected</span>
+  </div>
+  <div class="grid">
+    <section class="card"><h2>Soul Dial</h2><div id="dial">—</div></section>
+    <section class="card"><h2>Online table (mock)</h2><div id="table"></div></section>
+  </div>
+  <h2 style="font-size:15px">Log</h2>
+  <pre id="log"></pre>
+</main>
+<script type="module" src="./demo.js"></script>
+</body>
+</html>
