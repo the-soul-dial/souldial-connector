@@ -17,8 +17,12 @@ do not support Web Serial.
 ## Install
 
 ```bash
-npm install github:the-soul-dial/souldial-connector#v0.1.0
+npm install github:the-soul-dial/souldial-connector#v0.1.0 --allow-git=root
 ```
+
+npm 12 and later refuse packages installed from Git unless you allow it;
+`--allow-git=root` allows it only for packages you install directly. Older npm
+versions, pnpm and Yarn do not need the flag.
 
 Or load it straight from a CDN, no build step:
 
