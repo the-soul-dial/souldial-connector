@@ -29,39 +29,26 @@ commander tax and other counters.
 
 ## Install
 
-Add it as a normal dependency, pinned to a release tag, so updates are a
-one-line version change:
-
-```json
-{
-  "dependencies": {
-    "souldial-connector": "git+https://github.com/the-soul-dial/souldial-connector.git#v0.2.0"
-  }
-}
-```
-
-Or from the command line:
+Add it as a normal dependency:
 
 ```bash
-npm install "git+https://github.com/the-soul-dial/souldial-connector.git#v0.2.0"
+npm install "git+https://github.com/the-soul-dial/souldial-connector.git"
 ```
 
 npm 12 and later refuse dependencies from Git unless the project allows them.
-Add this to the project's `.npmrc` (it allows Git only for your direct
-dependencies, and keeps `npm ci` working in CI):
+Add this to the project's `.npmrc`:
 
 ```ini
 allow-git=root
 ```
 
-Older npm, pnpm and Yarn need no setting. The lockfile pins the exact commit.
+Older npm, pnpm and Yarn need no setting.
 
-**Updating:** change the tag (for example `#v0.2.0` → `#v0.3.0`) and run
-`npm install`. Releases are listed at
-https://github.com/the-soul-dial/souldial-connector/tags.
+**Updating:** `npm update souldial-connector` pulls the latest release (your
+lockfile otherwise keeps the version you installed).
 
 Please use the package rather than copying its files: fixes for new Dial
-firmware and Convoke changes reach you through version bumps. No runtime
+firmware and Convoke changes reach you through updates. No runtime
 dependencies; ES modules with TypeScript types. React is an optional peer
 dependency, used only by `souldial-connector/react`.
 

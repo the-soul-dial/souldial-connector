@@ -1,6 +1,6 @@
 {
   "name": "souldial-connector",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Connect a USB Soul Dial life counter to a web app over Web Serial: read and write life totals and counters, with two-way table sync.",
   "type": "module",
   "main": "./src/index.js",

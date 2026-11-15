@@ -16,22 +16,18 @@ do not support Web Serial.
 
 ## Install
 
-Add it to your `package.json`, pinned to a release tag:
-
 ```bash
-npm install "git+https://github.com/the-soul-dial/souldial-connector.git#v0.2.0"
+npm install "git+https://github.com/the-soul-dial/souldial-connector.git"
 ```
 
-npm 12 and later refuse dependencies from Git unless the project allows them.
-Add `allow-git=root` to your project's `.npmrc` (Git allowed only for your
-direct dependencies; `npm ci` then works in CI too). Older npm, pnpm and Yarn
-need no setting. Update by changing the tag. Releases:
-https://github.com/the-soul-dial/souldial-connector/tags
+npm 12 and later refuse dependencies from Git unless the project allows them:
+add `allow-git=root` to your project's `.npmrc`. Older npm, pnpm and Yarn need
+no setting. `npm update souldial-connector` pulls the latest release.
 
 Or load it straight from a CDN, no build step:
 
 ```js
-import { SoulDialLink, TableSync } from "https://cdn.jsdelivr.net/gh/the-soul-dial/souldial-connector@v0.2.0/src/index.js";
+import { SoulDialLink, TableSync } from "https://cdn.jsdelivr.net/gh/the-soul-dial/souldial-connector/src/index.js";
 ```
 
 ## Quick start: read and write
