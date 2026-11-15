@@ -239,3 +239,13 @@ test("open lowers RTS before DTR so closing never resets the Dial", async () => 
   await link.close();
   assert.deepEqual(calls.slice(3), [["signals", { requestToSend: false }], ["signals", { dataTerminalReady: false }], ["close"]]);
 });
+
+test("Convoke tracker ids can be renamed or switched off without editing the package", async () => {
+  const convoke = convokeTable([40]);
+  const table = createConvokeTable(convoke, { seats: [100], trackers: { [T.ENERGY]: { id: "energy", label: "Energy" }, [T.STORM]: null } });
+  assert.equal(await table.write(counterKey(0, T.ENERGY), 3, null), true);
+  assert.deepEqual(convoke.state.players[0].trackers, [{ id: "energy", label: "Energy", value: 3 }]);
+  assert.equal(table.read().get(counterKey(0, T.ENERGY)), 3);
+  assert.equal(await table.write(counterKey(0, T.STORM), 2, null), false);
+  assert.equal(await table.write(counterKey(0, T.TREASURE), 1, null), true); // defaults still apply
+});

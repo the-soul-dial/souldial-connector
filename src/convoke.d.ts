@@ -19,5 +19,13 @@ export interface ConvokeClientLike {
 /**
  * Adapts Convoke's game state client for TableSync.
  * seats[i] is the Convoke playerId at Dial seat i; unmapped seats are ignored.
+ * trackers overrides TRACKER_TYPES per counter type.
  */
-export declare function createConvokeTable(client: ConvokeClientLike, options: { seats: unknown[] }): TableAdapter;
+export declare function createConvokeTable(
+  client: ConvokeClientLike,
+  options: {
+    seats: unknown[];
+    /** Per counter type: a different tracker id/label, or null to stop linking that type. */
+    trackers?: Record<number, { id: string; label: string } | null>;
+  },
+): TableAdapter;

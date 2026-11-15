@@ -16,18 +16,22 @@ do not support Web Serial.
 
 ## Install
 
+Add it to your `package.json`, pinned to a release tag:
+
 ```bash
-npm install github:the-soul-dial/souldial-connector#v0.1.1 --allow-git=root
+npm install "git+https://github.com/the-soul-dial/souldial-connector.git#v0.2.0"
 ```
 
-npm 12 and later refuse packages installed from Git unless you allow it;
-`--allow-git=root` allows it only for packages you install directly. Older npm
-versions, pnpm and Yarn do not need the flag.
+npm 12 and later refuse dependencies from Git unless the project allows them.
+Add `allow-git=root` to your project's `.npmrc` (Git allowed only for your
+direct dependencies; `npm ci` then works in CI too). Older npm, pnpm and Yarn
+need no setting. Update by changing the tag. Releases:
+https://github.com/the-soul-dial/souldial-connector/tags
 
 Or load it straight from a CDN, no build step:
 
 ```js
-import { SoulDialLink, TableSync } from "https://cdn.jsdelivr.net/gh/the-soul-dial/souldial-connector@v0.1.1/src/index.js";
+import { SoulDialLink, TableSync } from "https://cdn.jsdelivr.net/gh/the-soul-dial/souldial-connector@v0.2.0/src/index.js";
 ```
 
 ## Quick start: read and write
@@ -124,7 +128,7 @@ damage in a game without commander damage, or counters in custom game types.
 
 ## Convoke adapter
 
-Full guide: [docs/convoke.md](docs/convoke.md). React hook: [examples/useSoulDial.js](examples/useSoulDial.js).
+Full guide: [docs/convoke.md](docs/convoke.md). React: `import { useSoulDial } from "souldial-connector/react"`.
 
 `souldial-connector/convoke` wraps Convoke's in-page game state client:
 
@@ -166,6 +170,11 @@ From `souldial-connector`:
 - `new TableSync({ link, table, prefer?, pollMs?, onStatus?, autoPoll? })`, `.start()`, `.stop()`.
 - Helpers: `lifeKey`, `counterKey`, `customKey`, `parseKey`, `dialFields`,
   `COUNTER_TYPES`, `COUNTER_SOURCE_NONE`, `SOULDIAL_USB_FILTERS`, `LinkError`.
+
+From `souldial-connector/convoke`: `createConvokeTable(client, { seats, trackers? })`, `TRACKER_TYPES`.
+
+From `souldial-connector/react` (React 18+, optional peer dependency):
+`useSoulDial(convokeClient, { prefer? })` → `{ supported, status, dialPlayers, connect(seats?), disconnect }`.
 
 Write statuses: `ok`, `conflict`, `protected`, `missing`, `no_game` (the Dial
 is not in a game), `no_seat`, `not_ready`, `busy`, `unsupported`.

@@ -29,14 +29,41 @@ commander tax and other counters.
 
 ## Install
 
-```bash
-npm install github:the-soul-dial/souldial-connector#v0.1.1 --allow-git=root
+Add it as a normal dependency, pinned to a release tag, so updates are a
+one-line version change:
+
+```json
+{
+  "dependencies": {
+    "souldial-connector": "git+https://github.com/the-soul-dial/souldial-connector.git#v0.2.0"
+  }
+}
 ```
 
-(npm 12+ needs `--allow-git=root` for GitHub installs. The handoff zip also
-includes the same package as a `.tgz`: `npm install ./souldial-connector-0.1.1.tgz`.)
+Or from the command line:
 
-No runtime dependencies; ES modules with TypeScript types.
+```bash
+npm install "git+https://github.com/the-soul-dial/souldial-connector.git#v0.2.0"
+```
+
+npm 12 and later refuse dependencies from Git unless the project allows them.
+Add this to the project's `.npmrc` (it allows Git only for your direct
+dependencies, and keeps `npm ci` working in CI):
+
+```ini
+allow-git=root
+```
+
+Older npm, pnpm and Yarn need no setting. The lockfile pins the exact commit.
+
+**Updating:** change the tag (for example `#v0.2.0` → `#v0.3.0`) and run
+`npm install`. Releases are listed at
+https://github.com/the-soul-dial/souldial-connector/tags.
+
+Please use the package rather than copying its files: fixes for new Dial
+firmware and Convoke changes reach you through version bumps. No runtime
+dependencies; ES modules with TypeScript types. React is an optional peer
+dependency, used only by `souldial-connector/react`.
 
 ## Wire it up
 
@@ -44,15 +71,13 @@ The adapter talks to your in-page game state client: the object with
 `setPlayerLife`, `setPoison`, `setCommanderTax`, `setCommanderDamage`,
 `setSecondaryCommanderDamage`, `upsertTracker`, `setTrackerValue`,
 `subscribe()` and `state.players`. We built it against those method names on
-convoke.games in November 2026. If you rename any, the adapter is one small
-file (`src/convoke.js`) to adjust.
+convoke.games in November 2026. If you rename any of them, let us know (or open
+an issue) and we will release an adapter update.
 
 ### React
 
-`examples/useSoulDial.js` is a ready hook:
-
 ```jsx
-import { useSoulDial } from "./useSoulDial";
+import { useSoulDial } from "souldial-connector/react";
 
 function SoulDialButton({ gameStateClient }) {
   const dial = useSoulDial(gameStateClient);
@@ -92,8 +117,8 @@ Convoke `playerId` sitting at Dial seat `i`.
 
 - **Default:** Convoke's player order. That works when players set the Dial up
   with the same player count and order as the Convoke table.
-- **Better:** after connecting, show the Dial's player names (`dialPlayers` in
-  the hook, or `(await link.readState()).players`) next to Convoke's players,
+- **Better:** after connecting, show the Dial's player names (`dialPlayers` from
+  `useSoulDial`, or `(await link.readState()).players`) next to Convoke's players,
   let the player match them once, then start the sync with that mapping.
 - Seats you leave out are ignored in both directions. A Dial with fewer players
   than the table only links the seats it has.
@@ -127,16 +152,28 @@ you offer "I've been tracking on my Dial" as an option.
 Commander damage never changes life by itself in either direction. Life is
 synced as its own value, so commander damage is never counted twice.
 
-If Convoke has native fields for Energy and the like, change `TRACKER_TYPES`
-in `src/convoke.js` (or map them in a copy of the adapter) instead of the
-`souldial-*` trackers.
+If Convoke has its own trackers for Energy and the like, pass `trackers` instead
+of using the `souldial-*` ids (keys are `COUNTER_TYPES` values; `null` stops
+linking a type):
+
+```js
+import { COUNTER_TYPES } from "souldial-connector";
+
+createConvokeTable(gameStateClient, {
+  seats,
+  trackers: {
+    [COUNTER_TYPES.ENERGY]: { id: "energy", label: "Energy" },
+    [COUNTER_TYPES.STORM]: null,
+  },
+});
+```
 
 Not linked yet: player count and names, passing the turn, timers, and Monarch /
 Initiative / Day-Night.
 
 ## Status and messages
 
-`onStatus` (and the hook's `status`) reports:
+`onStatus` (and the hook's `status` from `souldial-connector/react`) reports:
 
 | Status | Suggested player message |
 |---|---|
@@ -153,9 +190,11 @@ port.
 
 ## Try it without touching Convoke
 
-The package has a demo page with a mock table that uses this same adapter:
+The repository has a demo page with a mock table that uses this same adapter:
 
 ```bash
+git clone https://github.com/the-soul-dial/souldial-connector.git
+cd souldial-connector
 npm run demo
 ```
 

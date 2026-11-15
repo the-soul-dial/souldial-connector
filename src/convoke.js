@@ -36,16 +36,15 @@ export const TRACKER_TYPES = Object.freeze({
 const CUSTOM_PREFIX = "souldial-custom-";
 const PARTNER_BASE = 6;
 
-function trackerForType(type) {
-  return TRACKER_TYPES[type] || null;
-}
-
-function typeForTracker(id) {
-  for (const [type, tracker] of Object.entries(TRACKER_TYPES)) if (tracker.id === id) return Number(type);
-  return null;
-}
-
-export function createConvokeTable(client, { seats }) {
+// trackers: optional { [counterType]: { id, label } | null } overrides, e.g. to use
+// Convoke's own tracker ids, or null to stop linking a counter type.
+export function createConvokeTable(client, { seats, trackers = {} }) {
+  const trackerMap = { ...TRACKER_TYPES, ...trackers };
+  const trackerForType = (type) => trackerMap[type] || null;
+  const typeForTracker = (id) => {
+    for (const [type, tracker] of Object.entries(trackerMap)) if (tracker && tracker.id === id) return Number(type);
+    return null;
+  };
   const seatOf = (playerId) => seats.indexOf(playerId);
   const player = (seat) => {
     const id = seats[seat];

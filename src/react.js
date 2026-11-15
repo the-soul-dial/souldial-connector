@@ -1,14 +1,14 @@
-// React hook: link a USB Soul Dial with a Convoke game.
+// souldial-connector/react: React hook that links a USB Soul Dial with a Convoke game.
 //
+//   import { useSoulDial } from "souldial-connector/react";
 //   const dial = useSoulDial(gameStateClient);
 //   <button onClick={() => dial.connect()} disabled={!dial.supported}>Connect Soul Dial</button>
 //
 // connect() must be called directly from the click handler (Web Serial needs the
-// user's click to open the port picker). Plain JavaScript, no JSX, so it drops
-// into any React 18+ codebase; copy it into your app and adjust as needed.
+// user's click to open the port picker). React 18+ is a peer dependency.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SoulDialLink, TableSync } from "souldial-connector";
-import { createConvokeTable } from "souldial-connector/convoke";
+import { SoulDialLink, TableSync } from "./index.js";
+import { createConvokeTable } from "./convoke.js";
 
 /**
  * @param {object} client Convoke's game state client (setPlayerLife, setPoison, ..., subscribe, state).
