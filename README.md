@@ -17,7 +17,7 @@ do not support Web Serial.
 ## Install
 
 ```bash
-npm install github:the-soul-dial/souldial-connector#v0.1.0 --allow-git=root
+npm install github:the-soul-dial/souldial-connector#v0.1.1 --allow-git=root
 ```
 
 npm 12 and later refuse packages installed from Git unless you allow it;
@@ -27,7 +27,7 @@ versions, pnpm and Yarn do not need the flag.
 Or load it straight from a CDN, no build step:
 
 ```js
-import { SoulDialLink, TableSync } from "https://cdn.jsdelivr.net/gh/the-soul-dial/souldial-connector@v0.1.0/src/index.js";
+import { SoulDialLink, TableSync } from "https://cdn.jsdelivr.net/gh/the-soul-dial/souldial-connector@v0.1.1/src/index.js";
 ```
 
 ## Quick start: read and write
@@ -123,6 +123,8 @@ table-wide or on/off counters (Monarch, Initiative, Day/Night), commander
 damage in a game without commander damage, or counters in custom game types.
 
 ## Convoke adapter
+
+Full guide: [docs/convoke.md](docs/convoke.md). React hook: [examples/useSoulDial.js](examples/useSoulDial.js).
 
 `souldial-connector/convoke` wraps Convoke's in-page game state client:
 
