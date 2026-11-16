@@ -30,8 +30,53 @@ export class LinkError extends Error {
   constructor(code, message) {
     super(message || code);
     this.name = "LinkError";
-    this.code = code; // unsupported | invalid | timeout | closed
+    this.code = code; // unsupported | invalid | timeout | closed | in_use | yielded
   }
+}
+
+export const CONNECTOR_VERSION = "0.4.0"; // keep equal to package.json (tested)
+
+// One Dial link per page. A site that builds this package in and the Soul Dial
+// Link extension (which bundles its own copy) are separate module instances on
+// the same window, so they meet in a registry under a global symbol:
+//   - every copy lists itself, so the extension can see the site has Soul Dial
+//     built in and stay out of its way;
+//   - SoulDialLink.open() claims the page. The site wins: opening from a site
+//     copy closes an extension link first (its errors then carry "yielded");
+//     opening while the site holds the link fails with "in_use".
+// A copy is the site's unless setConnectorOwner("extension") says otherwise.
+const PAGE_KEY = Symbol.for("souldial-connector.page");
+const page = (globalThis[PAGE_KEY] ??= { copies: [], active: null });
+const thisCopy = { version: CONNECTOR_VERSION, owner: "site" };
+page.copies.push(thisCopy);
+
+export function setConnectorOwner(owner) {
+  if (owner !== "site" && owner !== "extension") throw new TypeError('owner must be "site" or "extension"');
+  thisCopy.owner = owner;
+}
+
+// Copies of this library on the page and which one holds the Dial link.
+// Copies older than 0.4.0 do not register.
+export function pageConnectors() {
+  const describe = (copy) => ({ version: copy.version, owner: copy.owner, self: copy === thisCopy });
+  const active = page.active && !page.active.link?.isClosed ? page.active : null;
+  return { copies: page.copies.map(describe), active: active ? describe(active.copy) : null };
+}
+
+async function claimPage() {
+  const active = page.active;
+  if (active && !(active.link?.isClosed)) {
+    if (thisCopy.owner === "site" && active.copy.owner === "extension" && active.link) {
+      await active.link.yieldPage();
+    } else {
+      throw new LinkError("in_use", active.copy.owner === "extension"
+        ? "The Soul Dial Link extension is connected to the Soul Dial on this page. Disconnect it there first."
+        : "This page is already connected to the Soul Dial.");
+    }
+  }
+  const claim = { copy: thisCopy, link: null };
+  page.active = claim;
+  return claim;
 }
 
 const CRC_TABLE = (() => {
@@ -173,6 +218,7 @@ export class SoulDialLink {
   #listeners = new Set();
   #queue = Promise.resolve();
   #closed = false;
+  #closeReason = null;
   #revision = 0;
   #state = null;
   #lastRequestAt = -Infinity;
@@ -195,21 +241,47 @@ export class SoulDialLink {
     return serial.requestPort({ filters: SOULDIAL_USB_FILTERS });
   }
 
+  // Claims the page first (see pageConnectors): fails with "in_use" while
+  // another copy holds the Dial, unless this is the site taking it from the extension.
   static async open(port, options) {
-    await port.open({ baudRate: 115200, bufferSize: 4096 });
+    const claim = await claimPage();
     try {
-      await quietSignals(port);
+      try {
+        await port.open({ baudRate: 115200, bufferSize: 4096 });
+      } catch (error) {
+        // An older copy (no registry) on this page may already hold the port.
+        if (error?.name === "InvalidStateError") throw new LinkError("in_use", "The Soul Dial is already connected on this page.");
+        throw error;
+      }
+      try {
+        await quietSignals(port);
+      } catch (error) {
+        try { await port.close(); } catch { /* ignore */ }
+        throw error;
+      }
     } catch (error) {
-      try { await port.close(); } catch { /* ignore */ }
+      if (page.active === claim) page.active = null;
       throw error;
     }
-    return new SoulDialLink(webSerialTransport(port), options);
+    const link = new SoulDialLink(webSerialTransport(port), options);
+    claim.link = link;
+    link.closed.finally(() => { if (page.active === claim) page.active = null; });
+    return link;
   }
+
+  get isClosed() { return this.#closed; }
 
   async close() {
     if (this.#closed) return;
     this.#closed = true;
     await this.#transport.close();
+  }
+
+  // The site's own connection is taking the Dial: close, and make every
+  // pending and later call fail with "yielded" rather than "closed".
+  async yieldPage() {
+    this.#closeReason = "yielded";
+    await this.close();
   }
 
   async #pump() {
@@ -241,7 +313,13 @@ export class SoulDialLink {
       if (!this.#closed) this.#fail(new LinkError("closed", "The Soul Dial USB connection was lost."));
       return;
     }
-    this.#fail(new LinkError("closed", "The Soul Dial USB connection closed."));
+    this.#fail(this.#closedError("The Soul Dial USB connection closed."));
+  }
+
+  #closedError(message) {
+    return this.#closeReason === "yielded"
+      ? new LinkError("yielded", "This site's own Soul Dial connection took over.")
+      : new LinkError("closed", message);
   }
 
   #fail(error) {
@@ -257,7 +335,7 @@ export class SoulDialLink {
   }
 
   #exchange(command, onLine, timeoutMs) {
-    if (this.#closed) return Promise.reject(new LinkError("closed", "The Soul Dial is not connected."));
+    if (this.#closed) return Promise.reject(this.#closedError("The Soul Dial is not connected."));
     return new Promise((resolve, reject) => {
       const finish = (fn, value) => {
         clearTimeout(timer);

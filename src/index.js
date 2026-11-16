@@ -4,13 +4,16 @@ export {
   SOULDIAL_USB_FILTERS,
   COUNTER_SOURCE_NONE,
   COUNTER_TYPES,
+  CONNECTOR_VERSION,
   LinkError,
   SoulDialLink,
   crc32,
   dialName,
   gamesetCommand,
+  pageConnectors,
   publicSnapshot,
   quietSignals,
+  setConnectorOwner,
   webSerialTransport,
 } from "./link.js";
 export {

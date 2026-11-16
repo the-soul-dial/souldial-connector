@@ -172,7 +172,7 @@ From `souldial-connector`:
 - `new TableSync({ link, table, prefer?, pollMs?, onStatus?, autoPoll? })`, `.start()`, `.stop()`.
 - Helpers: `lifeKey`, `counterKey`, `customKey`, `parseKey`, `dialFields`,
   `COUNTER_TYPES`, `COUNTER_SOURCE_NONE`, `SOULDIAL_USB_FILTERS`, `LinkError`,
-  `dialName` (a name as the Dial will show it).
+  `dialName` (a name as the Dial will show it), `pageConnectors`, `CONNECTOR_VERSION`.
 
 From `souldial-connector/convoke`: `createConvokeTable(client, { seats, trackers? })`, `TRACKER_TYPES`.
 
@@ -209,6 +209,23 @@ Magic: The Gathering, and `screen` while a setup page or menu is open on it;
 `unsupported` means its firmware predates setup. If the page reloads, compare
 `state.players` names with `dialName(name)` before setting up again, so a game
 already running for your table is not restarted.
+
+## Sharing a page with the Soul Dial Link extension
+
+Players may also have the Soul Dial Link Chrome extension, which brings the
+Dial to several online tables, yours included. The two never fight over the
+Dial:
+
+- Your copy of this package announces itself on the page. While it is there,
+  the extension stays out of the way and points players to your own Soul Dial
+  button.
+- Only one connection holds the Dial at a time. If the extension was
+  connected first, `SoulDialLink.open()` from your page takes the Dial over;
+  the extension's link closes with `LinkError` code `yielded`.
+- `pageConnectors()` lists the copies on the page and which one holds the
+  Dial. Opening while another holds it fails with code `in_use`.
+
+You don't need to do anything for this beyond installing the package.
 
 ## USB safety
 

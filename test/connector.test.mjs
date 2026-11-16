@@ -280,3 +280,58 @@ test("setupGame reports refusals and older firmware without throwing", async () 
   assert.deepEqual(await fastLink(new FakeDial(makeGame([40]), { gameset: false })).setupGame({ players: [{ name: "A" }] }),
     { status: "unsupported" });
 });
+
+// A Web Serial port double over a FakeDial; a second open() while open fails
+// like Chrome's (InvalidStateError).
+function fakePort(dial) {
+  let open = false;
+  return {
+    get isOpen() { return open; },
+    async open() {
+      if (open) throw Object.assign(new Error("The port is already open."), { name: "InvalidStateError" });
+      open = true;
+    },
+    async setSignals() {},
+    async close() { open = false; },
+    // cancel() ends this reader's pending read, as Chrome does; the Dial stays.
+    readable: { getReader: () => ({ read: () => dial.read(), cancel: async () => { for (const r of dial.waiters.splice(0)) r({ value: undefined, done: true }); }, releaseLock() {} }) },
+    writable: { getWriter: () => ({ write: (bytes) => dial.write(bytes), releaseLock() {} }) },
+  };
+}
+
+test("site and extension copies share one Dial link per page; the site wins", async () => {
+  const site = await import("../src/link.js?copy=site");
+  const ext = await import("../src/link.js?copy=extension");
+  ext.setConnectorOwner("extension");
+  const mine = site.pageConnectors().copies.filter((c) => c.self);
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].owner, "site");
+  assert.ok(site.pageConnectors().copies.some((c) => c.owner === "extension" && !c.self));
+  assert.equal(site.CONNECTOR_VERSION, JSON.parse(await import("node:fs").then((fs) => fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"))).version);
+
+  const dial = new FakeDial(makeGame([40, 40]));
+  const port = fakePort(dial);
+  const extLink = await ext.SoulDialLink.open(port, { minSpacingMs: 0, timeoutMs: 1000 });
+  assert.deepEqual(site.pageConnectors().active, { version: site.CONNECTOR_VERSION, owner: "extension", self: false });
+  // Another extension tab-copy (or a second open) while held: refused.
+  await assert.rejects(ext.SoulDialLink.open(fakePort(dial)), (e) => e.code === "in_use");
+
+  // The site's own button takes the Dial: the extension link closes as "yielded".
+  const siteLink = await site.SoulDialLink.open(port, { minSpacingMs: 0, timeoutMs: 1000 });
+  assert.equal(extLink.isClosed, true);
+  await assert.rejects(extLink.readState(), (e) => e.code === "yielded");
+  assert.equal(site.pageConnectors().active.owner, "site");
+  assert.equal((await siteLink.readState()).players.length, 2);
+
+  // While the site holds it, the extension cannot open.
+  await assert.rejects(ext.SoulDialLink.open(port), (e) => e.code === "in_use" && /already connected/.test(e.message));
+  await siteLink.close();
+  await settle();
+  assert.equal(site.pageConnectors().active, null);
+});
+
+test("an older connector holding the port reads as in_use, not a raw error", async () => {
+  const port = fakePort(new FakeDial(makeGame([40])));
+  await port.open(); // e.g. a site on a connector version without the page registry
+  await assert.rejects(SoulDialLink.open(port), (e) => e.code === "in_use");
+});

@@ -11,7 +11,11 @@ export declare const COUNTER_TYPES: Readonly<{
   MANA_COLORLESS: 16; SHIELD: 17; KO: 18; CUSTOM: 19; STORM: 20; FOOD: 21;
 }>;
 
-export type LinkErrorCode = "unsupported" | "invalid" | "timeout" | "closed";
+/**
+ * in_use: another connection on this page holds the Dial (e.g. the Soul Dial Link
+ * extension); yielded: this link was closed because the site's own connection took the Dial.
+ */
+export type LinkErrorCode = "unsupported" | "invalid" | "timeout" | "closed" | "in_use" | "yielded";
 export declare class LinkError extends Error {
   readonly code: LinkErrorCode;
   constructor(code: LinkErrorCode, message?: string);
@@ -129,6 +133,8 @@ export declare class SoulDialLink {
   readState(): Promise<DialSnapshot>;
   /** Writes one life or counter value through the Dial's normal, undoable path. */
   write(op: WriteOp): Promise<WriteResult>;
+  /** True once the link has closed (disconnect, unplug or yielded). */
+  readonly isClosed: boolean;
   /**
    * Starts a new local Commander game on the Dial matching a table: one seat per
    * player in this order, the starting life, partner commanders and names. The
@@ -149,6 +155,24 @@ export interface SerialPortLike {
   readonly readable: ReadableStream<Uint8Array>;
   readonly writable: WritableStream<Uint8Array>;
 }
+
+export declare const CONNECTOR_VERSION: string;
+
+/** A copy of this library on the page (a site's own copy or the Soul Dial Link extension's). */
+export interface PageConnector {
+  version: string;
+  owner: "site" | "extension";
+  /** True for the copy you imported. */
+  self: boolean;
+}
+/**
+ * Every copy of the connector on this page (0.4.0 and later) and the one holding
+ * the Dial link. One link per page: the site's copy takes the Dial from the
+ * extension; anything else opening while a link is held gets LinkError "in_use".
+ */
+export declare function pageConnectors(): { copies: PageConnector[]; active: PageConnector | null };
+/** For the Soul Dial Link extension's bundled copy only; every other copy is "site". */
+export declare function setConnectorOwner(owner: "site" | "extension"): void;
 
 export declare function crc32(bytes: Iterable<number>): number;
 export declare function gamesetCommand(
